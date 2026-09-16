@@ -1,87 +1,118 @@
 #include "protheus.ch"
+#include "restful.ch"
+#include "topconn.ch"
 
 /*--------------------------------------------------------------------*
 | Func:  TemplateRestCrud()
 | Autor: Eduardo Paranhos
 | Data:  10/08/2026
-| Desc:  Exemplo de REST CRUD para tabela generica — backend do template
-|        Configurar WSOBJ com path "/api/exemplo/dados"
-| Obs.:  Template educacional — dados e tabelas ficticios
+| Desc:  Backend REST para consumo pelo frontend PO-UI (Angular)
+|        Path configurado: "/api/exemplo/dados"
+| Obs.:  Template educacional com paginacao e persistencia transacionada
 *---------------------------------------------------------------------*/
 
-WSRESTFUL TemplateRestCrud Description "CRUD exemplo para PO-UI template"
+WSRESTFUL TemplateRestCrud DESCRIPTION "CRUD exemplo para PO-UI template" FORMAT APPLICATION_JSON
 
-    WsMethod GET Description "Lista dados"
-    WsMethod POST Description "Cria registro"
+    WSDATA limit AS CHARACTER OPTIONAL
 
-ENDWSRESTFUL
+    WSMETHOD GET DESCRIPTION "Lista dados formatados para PO-UI Table" WSSYNTAX "/api/exemplo/dados"
+    WSMETHOD POST DESCRIPTION "Cria registro vindo de formulario PO-UI" WSSYNTAX "/api/exemplo/dados"
+
+END WSRESTFUL
 
 /*--------------------------------------------------------------------*
-| GET — Retorna dados para o frontend PO-UI
+| GET — Retorna dados para o frontend PO-UI (po-table)
 *---------------------------------------------------------------------*/
-WSMETHOD GET WsReceive QUERY WsService TemplateRestCrud
+WSMETHOD GET WSRECEIVE limit WSSERVICE TemplateRestCrud
 
+    Local cAlias    := GetNextAlias()
+    Local cQuery    := ""
     Local oResponse := JsonObject():New()
-    Local aDados := {}
+    Local aDados    := {}
     Local oRegistro
-    Local nLimit := 50
-    Local nCount := 0
+    Local nLimit    := 50
 
-    // Query parameter opcional para limit
-    If WsGetUrlParam("limit") != Nil
-        nLimit := Val(WsGetUrlParam("limit"))
+    ::SetContentType("application/json")
+
+    If ValType(::limit) == "C" .And. !Empty(::limit)
+        nLimit := Max(Val(::limit), 1)
+    ElseIf Len(::aURLParms) >= 1
+        nLimit := Max(Val(::aURLParms[1]), 1)
     EndIf
 
-    // Busca dados da tabela generica ZZ1
-    DbSelectArea("ZZ1")
-    DbSetOrder(1)
-    DbGoTop()
+    cQuery := "SELECT ZZ1_CODIGO, ZZ1_DESC, ZZ1_PRECO "
+    cQuery += "  FROM " + RetSqlName("ZZ1") + " ZZ1 "
+    cQuery += " WHERE ZZ1.ZZ1_FILIAL = '" + xFilial("ZZ1") + "' "
+    cQuery += "   AND ZZ1.D_E_L_E_T_ = ' ' "
+    cQuery += " ORDER BY ZZ1.ZZ1_CODIGO "
+    cQuery := ChangeQuery(cQuery)
 
-    While !Eof() .And. nCount < nLimit
+    TCQuery cQuery New Alias (cAlias)
+
+    While !(cAlias)->(Eof()) .And. Len(aDados) < nLimit
         oRegistro := JsonObject():New()
-        oRegistro:SetProperty("codigo", AllTrim(ZZ1->ZZ1_CODIGO))
-        oRegistro:SetProperty("descricao", AllTrim(ZZ1->ZZ1_DESC))
+        oRegistro["codigo"]    := AllTrim((cAlias)->ZZ1_CODIGO)
+        oRegistro["descricao"] := AllTrim((cAlias)->ZZ1_DESC)
+        oRegistro["preco"]     := (cAlias)->ZZ1_PRECO
 
         AAdd(aDados, oRegistro)
-        nCount++
-        DbSkip()
+        (cAlias)->(DbSkip())
     EndDo
+    (cAlias)->(DbCloseArea())
 
-    oResponse:SetProperty("data", aDados)
-    oResponse:SetProperty("total", nCount)
-    oResponse:SetProperty("success", .T.)
+    // Estrutura compativel com PO-UI
+    oResponse["items"]   := aDados
+    oResponse["hasNext"] := (Len(aDados) == nLimit)
+    oResponse["total"]   := Len(aDados)
 
-    WsSetResponse(200, "application/json", oResponse:ToJson())
+    ::SetResponse(oResponse:ToJson())
 
 Return .T.
 
 /*--------------------------------------------------------------------*
-| POST — Cria novo registro
+| POST — Cria novo registro a partir do formulario PO-UI
 *---------------------------------------------------------------------*/
-WSMETHOD POST WsReceive JSON WsService TemplateRestCrud
+WSMETHOD POST WSSERVICE TemplateRestCrud
 
-    Local oBody := JsonObject():New()
+    Local oBody     := JsonObject():New()
     Local oResponse := JsonObject():New()
-    Local cCodigo := ""
+    Local cCodigo   := ""
+    Local cDesc     := ""
+    Local cContent  := ::GetContent()
 
-    oBody:FromJson(WsGetPostContent())
+    ::SetContentType("application/json")
 
-    If oBody:GetProperty("descricao") == Nil
-        WsSetResponse(422, "application/json", '{"success":false,"erro":"descricao obrigatoria"}')
-        Return .T.
+    If Empty(cContent) .Or. oBody:FromJson(cContent) != Nil
+        SetRestFault(400, "Payload JSON invalido")
+        Return .F.
     EndIf
 
-    cCodigo := "REG" + StrZero(Randomize(1, 99999), 5)
+    If !oBody:HasProperty("descricao") .Or. Empty(oBody["descricao"])
+        SetRestFault(422, "Campo 'descricao' e obrigatorio")
+        Return .F.
+    EndIf
 
-    DbSelectArea("ZZ1")
-    RecLock("ZZ1", .T.)
-    ZZ1->ZZ1_FILIAL := xFilial("ZZ1")
-    ZZ1->ZZ1_CODIGO := cCodigo
-    ZZ1->ZZ1_DESC   := oBody:GetProperty("descricao"):GetString()
-    MsUnLock()
+    cDesc := oBody["descricao"]
 
-    oResponse:SetProperty("success", .T.)
-    oResponse:SetProperty("codigo", cCodigo)
-    WsSetResponse(201, "application/json", oResponse:ToJson())
+    Begin Transaction
+        cCodigo := GetSxeNum("ZZ1", "ZZ1_CODIGO")
+
+        DbSelectArea("ZZ1")
+        DbSetOrder(1)
+
+        RecLock("ZZ1", .T.)
+        ZZ1->ZZ1_FILIAL := xFilial("ZZ1")
+        ZZ1->ZZ1_CODIGO := cCodigo
+        ZZ1->ZZ1_DESC   := cDesc
+        MsUnlock()
+
+        ConfirmSX8()
+    End Transaction
+
+    oResponse["success"] := .T.
+    oResponse["codigo"]  := cCodigo
+    oResponse["message"] := "Registro criado com sucesso"
+
+    ::SetResponse(oResponse:ToJson())
 
 Return .T.
