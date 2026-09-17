@@ -1,72 +1,53 @@
 # Protheus PO-UI Template
 
-Reference template for building modern Angular interfaces integrated with TOTVS Protheus ADVPL backends. Uses PO-UI component library, Protheus REST services, and standard ADVPL patterns.
+Reference architectural template demonstrating the integration of modern Angular web interfaces with TOTVS Protheus ADVPL backends. Uses the PO-UI component library, Protheus REST services, and canonical ADVPL patterns.
 
-> **Disclaimer**: Educational template. Uses fictional table names, mock data, and generic company references.
+> **Disclaimer**: Educational and conceptual template. All classes, models, and data structures are generic and fictional.
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────┐
-│              Angular + PO-UI             │
-│  (Browser UI — Components & Services)    │
+│              Angular + PO-UI            │
+│  (Browser UI — Components & Services)   │
 ├─────────────────────────────────────────┤
-│          @totvs/protheus-lib-core         │
-│  (Authentication, Session, REST proxy)   │
+│          @totvs/protheus-lib-core       │
+│  (Authentication, Session, REST proxy)  │
 ├─────────────────────────────────────────┤
-│           Protheus AppServer              │
-│  (REST endpoints, Business logic)        │
+│           Protheus AppServer            │
+│  (REST endpoints, Business logic)       │
 ├─────────────────────────────────────────┤
-│           SQL Server / Database           │
+│           SQL Server / Database         │
 └─────────────────────────────────────────┘
 ```
 
 ## Project Structure
 
-```
+```text
 protheus-po-ui-template/
-├── frontend/                  # Angular application
-│   ├── package.json
-│   ├── angular.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.html
-│       ├── main.ts
-│       ├── app/
-│       │   ├── app.module.ts
-│       │   ├── app.component.ts
-│       │   ├── app.component.html
-│       │   └── services/
-│       │       └── protheus.service.ts
-│       └── environments/
-│           └── environment.ts
-├── backend/                   # ADVPL sources
-│   ├── rest-crud.prw          # REST CRUD example
-│   └── business-rule.prw      # PE/Business rule example
-└── .gitignore
+├── frontend/                  # Angular application structure
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── services/
+│   │   │   │   └── protheus.service.ts
+│   │   │   ├── app.component.ts
+│   │   │   └── app.module.ts
+│   │   └── environments/
+├── backend/                   # Canonical ADVPL services
+│   ├── rest-crud.prw          # REST CRUD service implementation
+│   └── business-rule.prw      # Point of Entry (PE) business rule sample
+└── docs/
 ```
+
+## Integration Concept
+
+The template demonstrates two-way communication between modern web interfaces and the ERP:
+1. **Frontend Layer:** Built with PO-UI and Angular, consuming REST endpoints through `@totvs/protheus-lib-core` proxy services.
+2. **Backend Services:** Standard ADVPL REST services (`WSRESTFUL`) handling payload serialization, database transaction locking (`RecLock`), and business validation.
 
 ## Tech Stack
 
 `Angular` `PO-UI` `ADVPL` `TOTVS Protheus` `TypeScript` `REST APIs`
-
-## Quick Start
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-ng serve
-```
-
-Access `http://localhost:4200` — requires Protheus AppServer running.
-
-### Backend
-
-1. Copy `backend/*.prw` to your Protheus environment
-2. Compile via TDS or directly in Protheus
-3. Configure REST endpoints in Protheus WSOBJ
 
 ## License
 
